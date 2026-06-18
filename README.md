@@ -111,6 +111,16 @@ remote files that don't exist locally are never deleted.
 Per-source state (folder keys + uploaded file hashes) is persisted under
 `$XDG_CONFIG_HOME/jiocloud/copy/` so folder ids are remembered across runs.
 
+## Sync (identical local -> remote)
+
+```bash
+# make remote identical to local
+jiocloud sync ./photos Backups/Photos
+```
+
+`sync` does everything `copy` does, but **also deletes** remote files and folders
+that no longer exist in the local directory. Use with caution.
+
 ## Layout
 
 ```

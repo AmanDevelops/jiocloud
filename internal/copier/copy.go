@@ -22,6 +22,7 @@ type API interface {
 	ListFolder(folderKey string) ([]api.Object, error)
 	CreateFolder(name, parentKey string) (string, error)
 	Upload(path, folderKey string) (*api.UploadResult, error)
+	Trash(obj api.Object) error
 }
 
 // Copier carries the state for a single copy run.
@@ -29,17 +30,19 @@ type Copier struct {
 	client   API
 	state    *State
 	dryRun   bool
+	delete   bool // true for sync, false for copy
 	listings map[string][]api.Object // folderKey -> children, cached for this run
 
 	uploaded  int
 	skipped   int
 	created   int
+	deleted   int
 	bytesSent int64
 }
 
-// Run performs a one-way copy of srcDir into the remote folder at remotePath
-// (a slash-separated path relative to the user's root; "" means the root).
-func Run(client API, srcDir, remotePath string, dryRun bool) error {
+// Run performs a one-way copy (or sync) of srcDir into the remote folder at remotePath.
+// If deleteExtraneous is true, remote files/folders not present locally are moved to trash.
+func Run(client API, srcDir, remotePath string, dryRun, deleteExtraneous bool) error {
 	abs, err := filepath.Abs(srcDir)
 	if err != nil {
 		return err
@@ -67,10 +70,15 @@ func Run(client API, srcDir, remotePath string, dryRun bool) error {
 		client:   client,
 		state:    state,
 		dryRun:   dryRun,
+		delete:   deleteExtraneous,
 		listings: map[string][]api.Object{},
 	}
 
-	fmt.Printf("Copying %s -> /%s (root %s)\n", abs, remotePath, user.RootFolderKey)
+	op := "Copying"
+	if deleteExtraneous {
+		op = "Syncing"
+	}
+	fmt.Printf("%s %s -> /%s (root %s)\n", op, abs, remotePath, user.RootFolderKey)
 
 	baseKey := user.RootFolderKey
 	if remotePath != "" {
@@ -91,8 +99,8 @@ func Run(client API, srcDir, remotePath string, dryRun bool) error {
 		return fmt.Errorf("saving copy state: %w", err)
 	}
 
-	fmt.Printf("Done. %d uploaded (%s), %d skipped, %d folders created.\n",
-		s.uploaded, humanBytes(s.bytesSent), s.skipped, s.created)
+	fmt.Printf("Done. %d uploaded (%s), %d skipped, %d folders created, %d deleted.\n",
+		s.uploaded, humanBytes(s.bytesSent), s.skipped, s.created, s.deleted)
 	return nil
 }
 
@@ -121,6 +129,11 @@ func (s *Copier) copyDir(localDir, remoteKey, rel string) error {
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
 
+	localNames := make(map[string]bool, len(entries))
+	for _, e := range entries {
+		localNames[e.Name()] = true
+	}
+
 	remote, err := s.getListing(remoteKey)
 	if err != nil {
 		return err
@@ -129,6 +142,27 @@ func (s *Copier) copyDir(localDir, remoteKey, rel string) error {
 	for _, o := range remote {
 		if o.ObjectType == api.TypeFile {
 			remoteFiles[o.ObjectName] = o.Hash
+		}
+		
+		if s.delete && !localNames[o.ObjectName] {
+			childRel := path(rel, o.ObjectName)
+			if s.dryRun {
+				fmt.Printf("  - %s [dry-run]\n", childRel)
+				s.deleted++
+				continue
+			}
+			fmt.Printf("  - %s\n", childRel)
+			// Trashing a folder recursively deletes it on the remote.
+			if err := s.client.Trash(o); err != nil {
+				return fmt.Errorf("deleting %s: %w", childRel, err)
+			}
+			s.deleted++
+			// Clean up state
+			if o.ObjectType == api.TypeFolder {
+				delete(s.state.Folders, childRel)
+			} else {
+				delete(s.state.Files, childRel)
+			}
 		}
 	}
 

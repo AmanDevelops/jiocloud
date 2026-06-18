@@ -34,6 +34,8 @@ func main() {
 		runMkdir(os.Args[2:])
 	case "copy":
 		runCopy(os.Args[2:])
+	case "sync":
+		runSync(os.Args[2:])
 	case "whoami":
 		runWhoami(os.Args[2:])
 	case "version", "-v", "--version":
@@ -157,12 +159,36 @@ func runCopy(args []string) {
 	if err != nil {
 		fatal(err)
 	}
-	if err := copier.Run(api.New(creds), srcDir, remotePath, *dryRun); err != nil {
+	if err := copier.Run(api.New(creds), srcDir, remotePath, *dryRun, false); err != nil {
 		fatal(err)
 	}
-}
+	}
 
-func runDelete(args []string) {
+	func runSync(args []string) {
+	fs := flag.NewFlagSet("sync", flag.ExitOnError)
+	dryRun := fs.Bool("dry-run", false, "list what would change without uploading or creating folders")
+	fs.Parse(args)
+
+	if fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "sync: usage: jiocloud sync <dir> [remotePath] [-dry-run]")
+		os.Exit(2)
+	}
+	srcDir := fs.Arg(0)
+	remotePath := ""
+	if fs.NArg() >= 2 {
+		remotePath = fs.Arg(1)
+	}
+
+	creds, err := config.Load()
+	if err != nil {
+		fatal(err)
+	}
+	if err := copier.Run(api.New(creds), srcDir, remotePath, *dryRun, true); err != nil {
+		fatal(err)
+	}
+	}
+
+	func runDelete(args []string) {
 	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, "delete: missing remote path argument")
 		os.Exit(2)
