@@ -26,6 +26,8 @@ func main() {
 		runLogin(os.Args[2:])
 	case "upload":
 		runUpload(os.Args[2:])
+	case "delete":
+		runDelete(os.Args[2:])
 	case "copy":
 		runCopy(os.Args[2:])
 	case "whoami":
@@ -48,6 +50,7 @@ Usage:
   jiocloud login [cookie]                Authenticate. If cookie is omitted you'll be prompted.
   jiocloud whoami                        Show the logged-in user and storage quota.
   jiocloud upload <file> [-folder KEY]   Upload a single file (auto small/chunked).
+  jiocloud delete <remotePath>           Move a file or folder to the trash.
   jiocloud copy <dir> [remotePath] [-dry-run]
                                          One-way copy of a local dir into a remote folder,
                                          creating folders and uploading new/changed files.
@@ -151,6 +154,35 @@ func runCopy(args []string) {
 	if err := copier.Run(api.New(creds), srcDir, remotePath, *dryRun); err != nil {
 		fatal(err)
 	}
+}
+
+func runDelete(args []string) {
+	if len(args) < 1 {
+		fmt.Fprintln(os.Stderr, "delete: missing remote path argument")
+		os.Exit(2)
+	}
+	remotePath := args[0]
+
+	creds, err := config.Load()
+	if err != nil {
+		fatal(err)
+	}
+
+	client := api.New(creds)
+	obj, err := client.ResolvePath(remotePath)
+	if err != nil {
+		fatal(fmt.Errorf("resolving path %q: %w", remotePath, err))
+	}
+
+	if obj.ObjectKey == "" {
+		fatal(fmt.Errorf("cannot delete the root folder"))
+	}
+
+	fmt.Fprintf(os.Stderr, "Deleting %s (%s)...\n", remotePath, obj.ObjectType)
+	if err := client.Trash(obj); err != nil {
+		fatal(err)
+	}
+	fmt.Printf("Successfully moved %s to trash\n", remotePath)
 }
 
 func fatal(err error) {
