@@ -13,7 +13,7 @@ const downloadHost = "https://jmng2-dl.jioaicloud.com"
 // Download fetches a file from the server and writes it to destPath.
 func (c *Client) Download(objectKey, destPath string) error {
 	ts := time.Now().UnixMilli()
-	url := fmt.Sprintf("%s/download/files/%s?vdc=jmng2&apiKey=%s&devicetype=web&ts=%d", 
+	url := fmt.Sprintf("%s/download/files/%s?vdc=jmng2&apiKey=%s&devicetype=web&ts=%d",
 		downloadHost, objectKey, c.creds.ApiKey, ts)
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
