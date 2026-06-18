@@ -1,0 +1,8 @@
+# build output
+/jiocloud
+
+# local docs (messy / contains personal tokens)
+/docs/
+
+# any local credential dumps
+*credentials*.json
