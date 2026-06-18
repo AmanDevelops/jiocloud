@@ -25,6 +25,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+        with:
+          # Create/enable the Pages site automatically instead of requiring a
+          # manual toggle in repo Settings -> Pages.
+          enablement: true
       - name: Build Jekyll site
         uses: actions/jekyll-build-pages@v1
         with:
