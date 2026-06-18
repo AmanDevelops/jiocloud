@@ -1,6 +1,7 @@
 # jiocloud
 
-A minimal Go CLI for the JioAiCloud API, supporting **login** and **file upload**.
+A minimal, rclone-style Go CLI for the JioAiCloud API: **login**, **whoami**,
+single-file **upload**, and one-way folder **sync**.
 
 ## Build
 
@@ -42,10 +43,39 @@ Files under 10 MB use a single multipart request. Larger files automatically use
 the chunked protocol (`initiate` + 4 MB `PUT` chunks with per-chunk `Content-MD5`),
 resuming from the offset the server reports.
 
+## Whoami
+
+```bash
+jiocloud whoami
+```
+
+Prints the logged-in user, their root folder key, and storage quota
+(from `GET /security/users`).
+
+## Sync (one-way: local -> remote)
+
+```bash
+# mirror ./photos into the remote folder "Backups/Photos"
+jiocloud sync ./photos Backups/Photos
+
+# preview without uploading or creating folders
+jiocloud sync ./photos Backups/Photos -dry-run
+```
+
+`sync` walks the local directory, recreates the folder tree remotely (creating
+folders as needed and caching their keys), and uploads every file that is missing
+or whose content differs. A file is **skipped** when the remote folder already
+contains one with the same name and the same MD5 hash. It is strictly one-way:
+remote files that don't exist locally are never deleted.
+
+Per-source state (folder keys + uploaded file hashes) is persisted under
+`$XDG_CONFIG_HOME/jiocloud/sync/` so folder ids are remembered across runs.
+
 ## Layout
 
 ```
 cmd/jiocloud      CLI entrypoint and command dispatch
 internal/config   credential parsing + on-disk storage
-internal/api      HTTP client, credential scraping, login, upload
+internal/api      HTTP client, scraping, login, user info, folders, upload
+internal/sync     one-way folder sync engine + state persistence
 ```

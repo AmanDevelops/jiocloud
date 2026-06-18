@@ -13,8 +13,9 @@ const (
 	origin        = "https://www.jioaicloud.com"
 	referer       = "https://www.jioaicloud.com/"
 
-	uploadHost = "https://jmng2-upload.jioaicloud.com"
-	apiHost    = "https://jmng2-api.jioaicloud.com"
+	uploadHost   = "https://jmng2-upload.jioaicloud.com"
+	apiHost      = "https://jmng2-api.jioaicloud.com" // nmsURL
+	securityHost = "https://api.jioaicloud.com"       // securityURL (global DC)
 )
 
 // Client is an authenticated JioAiCloud API client.
