@@ -1,7 +1,7 @@
-// Package sync implements one-way (local -> remote) folder synchronisation
-// against the JioAiCloud API: it mirrors the local directory tree as remote
+// Package copier implements one-way (local -> remote) folder copy
+// against the JioAiCloud API: it recreates the local directory tree as remote
 // folders and uploads files that are missing or changed.
-package sync
+package copier
 
 import (
 	"crypto/md5"
@@ -16,7 +16,7 @@ import (
 	"github.com/AmanDevelops/jiocloud/internal/api"
 )
 
-// API is the subset of *api.Client the syncer needs (kept small for testing).
+// API is the subset of *api.Client the copier needs (kept small for testing).
 type API interface {
 	UserInfo() (*api.UserInfo, error)
 	ListFolder(folderKey string) ([]api.Object, error)
@@ -24,8 +24,8 @@ type API interface {
 	Upload(path, folderKey string) (*api.UploadResult, error)
 }
 
-// Syncer carries the state for a single sync run.
-type Syncer struct {
+// Copier carries the state for a single copy run.
+type Copier struct {
 	client   API
 	state    *State
 	dryRun   bool
@@ -37,7 +37,7 @@ type Syncer struct {
 	bytesSent int64
 }
 
-// Run performs a one-way sync of srcDir into the remote folder at remotePath
+// Run performs a one-way copy of srcDir into the remote folder at remotePath
 // (a slash-separated path relative to the user's root; "" means the root).
 func Run(client API, srcDir, remotePath string, dryRun bool) error {
 	abs, err := filepath.Abs(srcDir)
@@ -63,14 +63,14 @@ func Run(client API, srcDir, remotePath string, dryRun bool) error {
 	}
 	state.Root = user.RootFolderKey
 
-	s := &Syncer{
+	s := &Copier{
 		client:   client,
 		state:    state,
 		dryRun:   dryRun,
 		listings: map[string][]api.Object{},
 	}
 
-	fmt.Printf("Syncing %s -> /%s (root %s)\n", abs, remotePath, user.RootFolderKey)
+	fmt.Printf("Copying %s -> /%s (root %s)\n", abs, remotePath, user.RootFolderKey)
 
 	baseKey := user.RootFolderKey
 	if remotePath != "" {
@@ -81,14 +81,14 @@ func Run(client API, srcDir, remotePath string, dryRun bool) error {
 	}
 	s.state.Folders[""] = baseKey
 
-	if err := s.syncDir(abs, baseKey, ""); err != nil {
+	if err := s.copyDir(abs, baseKey, ""); err != nil {
 		// Persist whatever progress we made before returning the error.
 		_ = s.state.save()
 		return err
 	}
 
 	if err := s.state.save(); err != nil {
-		return fmt.Errorf("saving sync state: %w", err)
+		return fmt.Errorf("saving copy state: %w", err)
 	}
 
 	fmt.Printf("Done. %d uploaded (%s), %d skipped, %d folders created.\n",
@@ -97,7 +97,7 @@ func Run(client API, srcDir, remotePath string, dryRun bool) error {
 }
 
 // ensurePath walks/creates each folder segment, returning the final folder key.
-func (s *Syncer) ensurePath(parentKey string, segments []string) (string, error) {
+func (s *Copier) ensurePath(parentKey string, segments []string) (string, error) {
 	key := parentKey
 	rel := ""
 	for _, seg := range segments {
@@ -112,9 +112,9 @@ func (s *Syncer) ensurePath(parentKey string, segments []string) (string, error)
 	return key, nil
 }
 
-// syncDir recursively syncs localDir into the remote folder remoteKey. rel is the
-// remote path relative to the sync base, used as the state map key.
-func (s *Syncer) syncDir(localDir, remoteKey, rel string) error {
+// copyDir recursively copies localDir into the remote folder remoteKey. rel is the
+// remote path relative to the copy base, used as the state map key.
+func (s *Copier) copyDir(localDir, remoteKey, rel string) error {
 	entries, err := os.ReadDir(localDir)
 	if err != nil {
 		return err
@@ -153,7 +153,7 @@ func (s *Syncer) syncDir(localDir, remoteKey, rel string) error {
 				return err
 			}
 			s.state.Folders[childRel] = childKey
-			if err := s.syncDir(localPath, childKey, childRel); err != nil {
+			if err := s.copyDir(localPath, childKey, childRel); err != nil {
 				return err
 			}
 			continue
@@ -195,7 +195,7 @@ func (s *Syncer) syncDir(localDir, remoteKey, rel string) error {
 
 // ensureFolder returns the key of the named child folder of parentKey, creating
 // it if absent. Results are reflected in the cached listing.
-func (s *Syncer) ensureFolder(parentKey, name string) (string, error) {
+func (s *Copier) ensureFolder(parentKey, name string) (string, error) {
 	listing, err := s.getListing(parentKey)
 	if err != nil {
 		return "", err
@@ -225,7 +225,7 @@ func (s *Syncer) ensureFolder(parentKey, name string) (string, error) {
 }
 
 // getListing returns the cached children of folderKey, fetching once per run.
-func (s *Syncer) getListing(folderKey string) ([]api.Object, error) {
+func (s *Copier) getListing(folderKey string) ([]api.Object, error) {
 	if v, ok := s.listings[folderKey]; ok {
 		return v, nil
 	}

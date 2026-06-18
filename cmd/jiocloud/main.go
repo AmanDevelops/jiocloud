@@ -9,7 +9,7 @@ import (
 
 	"github.com/AmanDevelops/jiocloud/internal/api"
 	"github.com/AmanDevelops/jiocloud/internal/config"
-	"github.com/AmanDevelops/jiocloud/internal/sync"
+	"github.com/AmanDevelops/jiocloud/internal/copier"
 )
 
 // version is stamped at build time via -ldflags "-X main.version=...".
@@ -26,8 +26,8 @@ func main() {
 		runLogin(os.Args[2:])
 	case "upload":
 		runUpload(os.Args[2:])
-	case "sync":
-		runSync(os.Args[2:])
+	case "copy":
+		runCopy(os.Args[2:])
 	case "whoami":
 		runWhoami(os.Args[2:])
 	case "version", "-v", "--version":
@@ -48,8 +48,8 @@ Usage:
   jiocloud login [cookie]                Authenticate. If cookie is omitted you'll be prompted.
   jiocloud whoami                        Show the logged-in user and storage quota.
   jiocloud upload <file> [-folder KEY]   Upload a single file (auto small/chunked).
-  jiocloud sync <dir> [remotePath] [-dry-run]
-                                         One-way sync a local dir to a remote folder,
+  jiocloud copy <dir> [remotePath] [-dry-run]
+                                         One-way copy of a local dir into a remote folder,
                                          creating folders and uploading new/changed files.
   jiocloud version                       Print the version.
 
@@ -129,13 +129,13 @@ func runWhoami(args []string) {
 	fmt.Printf("Storage: %d / %d bytes used\n", u.Quota.UsedSpace, u.Quota.AllocatedSpace)
 }
 
-func runSync(args []string) {
-	fs := flag.NewFlagSet("sync", flag.ExitOnError)
+func runCopy(args []string) {
+	fs := flag.NewFlagSet("copy", flag.ExitOnError)
 	dryRun := fs.Bool("dry-run", false, "list what would change without uploading or creating folders")
 	fs.Parse(args)
 
 	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "sync: usage: jiocloud sync <dir> [remotePath] [-dry-run]")
+		fmt.Fprintln(os.Stderr, "copy: usage: jiocloud copy <dir> [remotePath] [-dry-run]")
 		os.Exit(2)
 	}
 	srcDir := fs.Arg(0)
@@ -148,7 +148,7 @@ func runSync(args []string) {
 	if err != nil {
 		fatal(err)
 	}
-	if err := sync.Run(api.New(creds), srcDir, remotePath, *dryRun); err != nil {
+	if err := copier.Run(api.New(creds), srcDir, remotePath, *dryRun); err != nil {
 		fatal(err)
 	}
 }

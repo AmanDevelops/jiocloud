@@ -4,7 +4,7 @@ title: jiocloud
 
 **jiocloud** is a small, [rclone](https://rclone.org/)-style command-line tool for
 the JioAiCloud API. It can authenticate with your account, upload single files, and
-do one-way (local → remote) folder sync.
+do one-way (local → remote) folder copy.
 
 > Unofficial. Not affiliated with or endorsed by Jio. Use with your own account.
 
@@ -89,17 +89,17 @@ jiocloud upload ./big.iso -folder 545CA841D1BA1906E063C00B10AC6C35
 Files under 10 MB use one multipart request; larger files automatically switch to the
 chunked protocol and resume from the server-reported offset.
 
-### Sync a folder (one-way)
+### Copy a folder (one-way)
 
 ```sh
 # mirror ./photos into a remote folder "Backups/Photos"
-jiocloud sync ./photos Backups/Photos
+jiocloud copy ./photos Backups/Photos
 
 # preview only — no folders created, nothing uploaded
-jiocloud sync ./photos Backups/Photos -dry-run
+jiocloud copy ./photos Backups/Photos -dry-run
 ```
 
-`sync` walks your local directory, recreates the tree as remote folders (created on
+`copy` walks your local directory, recreates the tree as remote folders (created on
 demand, their keys cached), and uploads every file that is missing or whose contents
 changed. A file is **skipped** when the remote folder already has one with the same
 name and the same MD5. Output marks each file:
@@ -110,7 +110,7 @@ name and the same MD5. Output marks each file:
 ```
 
 It is strictly one-way: **remote-only files are never deleted.** Per-source state
-(folder keys + uploaded hashes) is kept under `~/.config/jiocloud/sync/`, so re-runs
+(folder keys + uploaded hashes) is kept under `~/.config/jiocloud/copy/`, so re-runs
 remember the folders they created.
 
 ## Command reference
@@ -120,7 +120,7 @@ remember the folders they created.
 | `jiocloud login [cookie]` | Authenticate; prompts if the cookie is omitted. |
 | `jiocloud whoami` | Show the user, root folder key, and storage quota. |
 | `jiocloud upload <file> [-folder KEY]` | Upload one file (auto small/chunked). |
-| `jiocloud sync <dir> [remotePath] [-dry-run]` | One-way local → remote folder sync. |
+| `jiocloud copy <dir> [remotePath] [-dry-run]` | One-way local → remote folder copy. |
 | `jiocloud version` | Print the version. |
 
 ## Links

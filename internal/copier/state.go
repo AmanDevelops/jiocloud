@@ -1,4 +1,4 @@
-package sync
+package copier
 
 import (
 	"crypto/sha1"
@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 )
 
-// State is the persisted record of a sync target: the remote folder keys created
+// State is the persisted record of a copy target: the remote folder keys created
 // for each relative path, and the md5 hashes of files already uploaded. It lets
 // re-runs skip work and satisfies "save folder id somewhere".
 type State struct {
@@ -39,7 +39,7 @@ func statePath(source string) (string, error) {
 	}
 	sum := sha1.Sum([]byte(source))
 	name := hex.EncodeToString(sum[:]) + ".json"
-	return filepath.Join(dir, "jiocloud", "sync", name), nil
+	return filepath.Join(dir, "jiocloud", "copy", name), nil
 }
 
 // loadState reads existing state for source, or returns a fresh one.
