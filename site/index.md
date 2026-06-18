@@ -3,8 +3,8 @@ title: jiocloud
 ---
 
 **jiocloud** is a small, [rclone](https://rclone.org/)-style command-line tool for
-the JioAiCloud API. It can authenticate with your account, list files, upload single files,
-do one-way (local → remote) folder copy, and delete files/folders.
+the JioAiCloud API. It can authenticate with your account, list files, create directories, upload and download single files,
+do one-way (local → remote) folder copy, sync, and delete files/folders.
 
 > Unofficial. Not affiliated with or endorsed by Jio. Use with your own account.
 
@@ -131,3 +131,4 @@ remember the folders they created.
 
 - Source: [github.com/AmanDevelops/jiocloud](https://github.com/AmanDevelops/jiocloud)
 - Releases: [github.com/AmanDevelops/jiocloud/releases](https://github.com/AmanDevelops/jiocloud/releases)
+b.com/AmanDevelops/jiocloud/releases)
