@@ -9,6 +9,7 @@ import (
 
 	"github.com/AmanDevelops/jiocloud/internal/api"
 	"github.com/AmanDevelops/jiocloud/internal/config"
+	"github.com/AmanDevelops/jiocloud/internal/sync"
 )
 
 func main() {
@@ -22,6 +23,10 @@ func main() {
 		runLogin(os.Args[2:])
 	case "upload":
 		runUpload(os.Args[2:])
+	case "sync":
+		runSync(os.Args[2:])
+	case "whoami":
+		runWhoami(os.Args[2:])
 	case "-h", "--help", "help":
 		usage()
 	default:
@@ -35,8 +40,12 @@ func usage() {
 	fmt.Fprint(os.Stderr, `jiocloud - minimal JioAiCloud CLI
 
 Usage:
-  jiocloud login [cookie]      Authenticate. If cookie is omitted you'll be prompted.
-  jiocloud upload <file> [-folder KEY]   Upload a file (auto small/chunked).
+  jiocloud login [cookie]                Authenticate. If cookie is omitted you'll be prompted.
+  jiocloud whoami                        Show the logged-in user and storage quota.
+  jiocloud upload <file> [-folder KEY]   Upload a single file (auto small/chunked).
+  jiocloud sync <dir> [remotePath] [-dry-run]
+                                         One-way sync a local dir to a remote folder,
+                                         creating folders and uploading new/changed files.
 
 The login cookie format is:
   {{USER_ID}}:Basic {{AUTH_CODE}}:{{APP_SECRET}}:{{DEVICE_KEY}}
@@ -97,6 +106,44 @@ func runUpload(args []string) {
 	fmt.Printf("objectKey: %s\n", res.ObjectKey)
 	if res.URL != "" {
 		fmt.Printf("url: %s\n", res.URL)
+	}
+}
+
+func runWhoami(args []string) {
+	creds, err := config.Load()
+	if err != nil {
+		fatal(err)
+	}
+	u, err := api.New(creds).UserInfo()
+	if err != nil {
+		fatal(err)
+	}
+	fmt.Printf("User:    %s (%s)\n", u.FirstName, u.UserID)
+	fmt.Printf("Root:    %s\n", u.RootFolderKey)
+	fmt.Printf("Storage: %d / %d bytes used\n", u.Quota.UsedSpace, u.Quota.AllocatedSpace)
+}
+
+func runSync(args []string) {
+	fs := flag.NewFlagSet("sync", flag.ExitOnError)
+	dryRun := fs.Bool("dry-run", false, "list what would change without uploading or creating folders")
+	fs.Parse(args)
+
+	if fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "sync: usage: jiocloud sync <dir> [remotePath] [-dry-run]")
+		os.Exit(2)
+	}
+	srcDir := fs.Arg(0)
+	remotePath := ""
+	if fs.NArg() >= 2 {
+		remotePath = fs.Arg(1)
+	}
+
+	creds, err := config.Load()
+	if err != nil {
+		fatal(err)
+	}
+	if err := sync.Run(api.New(creds), srcDir, remotePath, *dryRun); err != nil {
+		fatal(err)
 	}
 }
 

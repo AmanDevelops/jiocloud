@@ -17,7 +17,7 @@ type Credentials struct {
 	AuthCode  string `json:"authCode"`  // the Basic token, without the leading "Basic "
 	AppSecret string `json:"appSecret"` // X-App-Secret
 	DeviceKey string `json:"deviceKey"`
-	ApiKey    string `json:"apiKey"`    // X-Api-Key
+	ApiKey    string `json:"apiKey"` // X-Api-Key
 }
 
 // ParseCookie parses the login string of the form:
