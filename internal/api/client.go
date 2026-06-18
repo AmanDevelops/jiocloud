@@ -36,6 +36,7 @@ func New(creds *config.Credentials) *Client {
 // every authenticated request. Content-Type is left to the caller.
 func (c *Client) setCommonHeaders(h http.Header) {
 	h.Set("Accept", "application/json; charset=UTF-8")
+	h.Set("Accept-Language", "en-GB,en;q=0.5")
 	h.Set("Authorization", "Basic "+c.creds.AuthCode)
 	h.Set("Origin", origin)
 	h.Set("Referer", referer)
