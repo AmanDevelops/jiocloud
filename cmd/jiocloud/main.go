@@ -12,6 +12,9 @@ import (
 	"github.com/AmanDevelops/jiocloud/internal/sync"
 )
 
+// version is stamped at build time via -ldflags "-X main.version=...".
+var version = "dev"
+
 func main() {
 	if len(os.Args) < 2 {
 		usage()
@@ -27,6 +30,8 @@ func main() {
 		runSync(os.Args[2:])
 	case "whoami":
 		runWhoami(os.Args[2:])
+	case "version", "-v", "--version":
+		fmt.Printf("jiocloud %s\n", version)
 	case "-h", "--help", "help":
 		usage()
 	default:
@@ -46,6 +51,7 @@ Usage:
   jiocloud sync <dir> [remotePath] [-dry-run]
                                          One-way sync a local dir to a remote folder,
                                          creating folders and uploading new/changed files.
+  jiocloud version                       Print the version.
 
 The login cookie format is:
   {{USER_ID}}:Basic {{AUTH_CODE}}:{{APP_SECRET}}:{{DEVICE_KEY}}
