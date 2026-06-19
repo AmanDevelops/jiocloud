@@ -1,0 +1,4 @@
+title: jiocloud
+description: A minimal, rclone-style CLI for the JioAiCloud API — login, upload, and one-way folder sync.
+theme: jekyll-theme-cayman
+show_downloads: false

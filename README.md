@@ -3,10 +3,33 @@
 A minimal, rclone-style Go CLI for the JioAiCloud API: **login**, **whoami**,
 single-file **upload**, and one-way folder **sync**.
 
-## Build
+Full usage docs: <https://AmanDevelops.github.io/jiocloud/>
+
+## Install (Linux)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AmanDevelops/jiocloud/main/install.sh | sh
+```
+
+Downloads the latest release for your architecture (`amd64`/`arm64`), verifies its
+checksum, and installs `jiocloud` into `~/.local/bin`. Override with
+`JIOCLOUD_INSTALL_DIR` or pin a version with `JIOCLOUD_VERSION=vX.Y.Z`.
+
+## Build from source
 
 ```bash
 go build -o jiocloud ./cmd/jiocloud
+```
+
+## Releasing
+
+Pushing a `v*` tag triggers `.github/workflows/release.yml`, which cross-compiles
+Linux `amd64`/`arm64` binaries, generates `checksums.txt`, and publishes them as a
+GitHub Release:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
 ## Login
