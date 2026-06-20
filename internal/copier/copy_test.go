@@ -1,4 +1,4 @@
-package sync
+package copier
 
 import (
 	"crypto/md5"
@@ -51,7 +51,7 @@ func md5str(b []byte) string {
 	return hex.EncodeToString(s[:])
 }
 
-func TestSyncCreatesFoldersAndUploads(t *testing.T) {
+func TestCopyCreatesFoldersAndUploads(t *testing.T) {
 	// Use a temp config dir so state writes don't touch the real home.
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
@@ -72,7 +72,7 @@ func TestSyncCreatesFoldersAndUploads(t *testing.T) {
 	}
 }
 
-func TestSyncSkipsUnchanged(t *testing.T) {
+func TestCopySkipsUnchanged(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	src := t.TempDir()
