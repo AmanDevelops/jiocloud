@@ -20,11 +20,13 @@ const listLimit = 1000
 
 // Object is a folder (FR) or file (FE) entry within a folder listing.
 type Object struct {
-	ObjectKey   string `json:"objectKey"`
-	ObjectType  string `json:"objectType"`
-	ObjectName  string `json:"objectName"`
-	Hash        string `json:"hash"` // md5, present for files
-	SizeInBytes int64  `json:"sizeInBytes"`
+	ObjectKey        string `json:"objectKey"`
+	ObjectType       string `json:"objectType"`
+	ObjectName       string `json:"objectName"`
+	Hash             string `json:"hash"` // md5, present for files
+	SizeInBytes      int64  `json:"sizeInBytes"`
+	ParentObjectKey  string `json:"parentObjectKey"`
+	ParentObjectType string `json:"parentObjectType"`
 }
 
 type listResp struct {

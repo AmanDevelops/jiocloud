@@ -120,6 +120,7 @@ remember the folders they created.
 | `jiocloud login [cookie]` | Authenticate; prompts if the cookie is omitted. |
 | `jiocloud whoami` | Show the user, root folder key, and storage quota. |
 | `jiocloud upload <file> [-folder KEY]` | Upload one file (auto small/chunked). |
+| `jiocloud delete <remotePath>` | Move a file or folder to the trash. |
 | `jiocloud copy <dir> [remotePath] [-dry-run]` | One-way local → remote folder copy. |
 | `jiocloud version` | Print the version. |
 

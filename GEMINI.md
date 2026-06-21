@@ -35,6 +35,7 @@ On login, it automatically scrapes the web app for `X-Api-Key` and `X-App-Secret
 ### 3. File Operations
 
 - **Upload:** Automatically switches between single multipart requests (for files < 10 MB) and a chunked protocol (4 MB chunks) for larger files.
+- **Delete:** Moves a remote file or folder to the trash using the path.
 - **Copy:** Performs a one-way sync from local to remote. It uses MD5 hashes to skip identical files and persists folder keys and file hashes in `$XDG_CONFIG_HOME/jiocloud/copy/`.
 
 ## Development Conventions

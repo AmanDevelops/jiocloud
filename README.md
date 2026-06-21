@@ -1,7 +1,7 @@
 # jiocloud
 
 A minimal, rclone-style Go CLI for the JioAiCloud API: **login**, **whoami**,
-single-file **upload**, and one-way folder **copy**.
+single-file **upload**, one-way folder **copy**, and **delete**.
 
 Full usage docs: <https://AmanDevelops.github.io/jiocloud/>
 
@@ -100,5 +100,8 @@ Per-source state (folder keys + uploaded file hashes) is persisted under
 cmd/jiocloud      CLI entrypoint and command dispatch
 internal/config   credential parsing + on-disk storage
 internal/api      HTTP client, scraping, login, user info, folders, upload
+internal/copier   one-way folder copy engine + state persistence
+```
+rs, upload
 internal/copier   one-way folder copy engine + state persistence
 ```
