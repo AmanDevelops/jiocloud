@@ -1,7 +1,7 @@
 # jiocloud
 
 A minimal, rclone-style Go CLI for the JioAiCloud API: **login**, **whoami**,
-single-file **upload**, one-way folder **copy**, and **delete**.
+**ls**, single-file **upload**, one-way folder **copy**, and **delete**.
 
 Full usage docs: <https://AmanDevelops.github.io/jiocloud/>
 
@@ -50,6 +50,16 @@ jiocloud login 'da35...:Basic NDA1...:ODc0...:6e4b...'
 
 # ...or be prompted for it
 jiocloud login
+```
+
+## List (ls)
+
+```bash
+# list the root directory
+jiocloud ls
+
+# list a specific folder
+jiocloud ls Backups/Photos
 ```
 
 ## Upload

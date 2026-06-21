@@ -28,6 +28,8 @@ func main() {
 		runUpload(os.Args[2:])
 	case "delete":
 		runDelete(os.Args[2:])
+	case "ls":
+		runLs(os.Args[2:])
 	case "copy":
 		runCopy(os.Args[2:])
 	case "whoami":
@@ -49,6 +51,7 @@ func usage() {
 Usage:
   jiocloud login [cookie]                Authenticate. If cookie is omitted you'll be prompted.
   jiocloud whoami                        Show the logged-in user and storage quota.
+  jiocloud ls [remotePath]               List files and directories (defaults to root).
   jiocloud upload <file> [-folder KEY]   Upload a single file (auto small/chunked).
   jiocloud delete <remotePath>           Move a file or folder to the trash.
   jiocloud copy <dir> [remotePath] [-dry-run]
@@ -183,6 +186,41 @@ func runDelete(args []string) {
 		fatal(err)
 	}
 	fmt.Printf("Successfully moved %s to trash\n", remotePath)
+}
+
+func runLs(args []string) {
+	remotePath := ""
+	if len(args) > 0 {
+		remotePath = args[0]
+	}
+
+	creds, err := config.Load()
+	if err != nil {
+		fatal(err)
+	}
+
+	client := api.New(creds)
+	obj, err := client.ResolvePath(remotePath)
+	if err != nil {
+		fatal(fmt.Errorf("resolving path %q: %w", remotePath, err))
+	}
+
+	if obj.ObjectType != api.TypeFolder {
+		fatal(fmt.Errorf("%q is not a folder", remotePath))
+	}
+
+	items, err := client.ListFolder(obj.ObjectKey)
+	if err != nil {
+		fatal(fmt.Errorf("listing folder: %w", err))
+	}
+
+	for _, item := range items {
+		if item.ObjectType == api.TypeFolder {
+			fmt.Printf("%12s %s/\n", "DIR", item.ObjectName)
+		} else {
+			fmt.Printf("%12d %s\n", item.SizeInBytes, item.ObjectName)
+		}
+	}
 }
 
 func fatal(err error) {
