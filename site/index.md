@@ -124,6 +124,7 @@ remember the folders they created.
 | `jiocloud upload <file> [-folder KEY]` | Upload one file (auto small/chunked). |
 | `jiocloud delete <remotePath>` | Move a file or folder to the trash. |
 | `jiocloud copy <dir> [remotePath] [-dry-run]` | One-way local → remote folder copy. |
+| `jiocloud sync <dir> [remotePath] [-dry-run]` | Like copy, but deletes remote files/folders not present locally. |
 | `jiocloud version` | Print the version. |
 
 ## Links

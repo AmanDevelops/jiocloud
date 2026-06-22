@@ -46,6 +46,31 @@ func (f *fakeAPI) Upload(path, folderKey string) (*api.UploadResult, error) {
 	return &api.UploadResult{ObjectName: filepath.Base(path)}, nil
 }
 
+func (f *fakeAPI) Trash(obj api.Object) error {
+	// For testing, just remove it from the parent folder's listing
+	if obj.ParentObjectKey != "" {
+		var filtered []api.Object
+		for _, o := range f.folders[obj.ParentObjectKey] {
+			if o.ObjectKey != obj.ObjectKey {
+				filtered = append(filtered, o)
+			}
+		}
+		f.folders[obj.ParentObjectKey] = filtered
+	} else {
+	    // If parent is empty, remove it from everywhere it could be (for simplicity)
+	    for parent, children := range f.folders {
+	        var filtered []api.Object
+	        for _, o := range children {
+	            if o.ObjectKey != obj.ObjectKey {
+	                filtered = append(filtered, o)
+	            }
+	        }
+	        f.folders[parent] = filtered
+	    }
+	}
+	return nil
+}
+
 func md5str(b []byte) string {
 	s := md5.Sum(b)
 	return hex.EncodeToString(s[:])
@@ -60,7 +85,7 @@ func TestCopyCreatesFoldersAndUploads(t *testing.T) {
 	mustWrite(t, filepath.Join(src, "sub", "b.txt"), "world")
 
 	f := newFakeAPI()
-	if err := Run(f, src, "", false); err != nil {
+	if err := Run(f, src, "", false, false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -84,7 +109,7 @@ func TestCopySkipsUnchanged(t *testing.T) {
 		{ObjectKey: "x", ObjectType: api.TypeFile, ObjectName: "a.txt", Hash: md5str([]byte("hello"))},
 	}
 
-	if err := Run(f, src, "", false); err != nil {
+	if err := Run(f, src, "", false, false); err != nil {
 		t.Fatal(err)
 	}
 	if len(f.uploads) != 0 {
