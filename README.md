@@ -62,6 +62,13 @@ jiocloud ls
 jiocloud ls Backups/Photos
 ```
 
+## Make Directory (mkdir)
+
+```bash
+# create a new directory and any missing intermediate folders
+jiocloud mkdir Backups/NewFolder
+```
+
 ## Upload
 
 ```bash

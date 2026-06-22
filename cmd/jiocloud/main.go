@@ -30,6 +30,8 @@ func main() {
 		runDelete(os.Args[2:])
 	case "ls":
 		runLs(os.Args[2:])
+	case "mkdir":
+		runMkdir(os.Args[2:])
 	case "copy":
 		runCopy(os.Args[2:])
 	case "whoami":
@@ -52,6 +54,7 @@ Usage:
   jiocloud login [cookie]                Authenticate. If cookie is omitted you'll be prompted.
   jiocloud whoami                        Show the logged-in user and storage quota.
   jiocloud ls [remotePath]               List files and directories (defaults to root).
+  jiocloud mkdir <remotePath>            Make the path if it doesn't already exist.
   jiocloud upload <file> [-folder KEY]   Upload a single file (auto small/chunked).
   jiocloud delete <remotePath>           Move a file or folder to the trash.
   jiocloud copy <dir> [remotePath] [-dry-run]
@@ -221,6 +224,27 @@ func runLs(args []string) {
 			fmt.Printf("%12d %s\n", item.SizeInBytes, item.ObjectName)
 		}
 	}
+}
+
+func runMkdir(args []string) {
+	if len(args) < 1 {
+		fmt.Fprintln(os.Stderr, "mkdir: missing remote path argument")
+		os.Exit(2)
+	}
+	remotePath := args[0]
+
+	creds, err := config.Load()
+	if err != nil {
+		fatal(err)
+	}
+
+	client := api.New(creds)
+	fmt.Fprintf(os.Stderr, "Making directory %s...\n", remotePath)
+	obj, err := client.MkdirAll(remotePath)
+	if err != nil {
+		fatal(err)
+	}
+	fmt.Printf("Directory ready: %s (key: %s)\n", remotePath, obj.ObjectKey)
 }
 
 func fatal(err error) {
