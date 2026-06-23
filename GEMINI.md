@@ -37,7 +37,7 @@ On login, it automatically scrapes the web app for `X-Api-Key` and `X-App-Secret
 - **List:** Lists files and directories in a given remote path. Defaults to root if no path is provided.
 - **Make Directory:** Creates a new directory at the specified remote path, creating intermediate folders if necessary.
 - **Upload:** Automatically switches between single multipart requests (for files < 10 MB) and a chunked protocol (4 MB chunks) for larger files.
-- **Download:** Downloads a single remote file to the local filesystem.
+- **Download:** Downloads a single remote file or an entire remote folder recursively to the local filesystem.
 - **Delete:** Moves a remote file or folder to the trash using the path.
 - **Copy:** Performs a one-way sync from local to remote. It uses MD5 hashes to skip identical files and persists folder keys and file hashes in `$XDG_CONFIG_HOME/jiocloud/copy/`.
 - **Sync:** Like copy, but also deletes remote files and folders that are no longer present locally.

@@ -91,6 +91,9 @@ jiocloud download Documents/Report.pdf
 
 # download to a specific local path
 jiocloud download Documents/Report.pdf /tmp/Report.pdf
+
+# recursively download an entire folder
+jiocloud download Backups/Photos ./LocalPhotos
 ```
 
 ## Whoami

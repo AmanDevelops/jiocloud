@@ -27,10 +27,10 @@ func main() {
 		runLogin(os.Args[2:])
 	case "upload":
 		runUpload(os.Args[2:])
-	case "delete":
-		runDelete(os.Args[2:])
 	case "download":
 		runDownload(os.Args[2:])
+	case "delete":
+		runDelete(os.Args[2:])
 	case "ls":
 		runLs(os.Args[2:])
 	case "mkdir":
@@ -61,11 +61,13 @@ Usage:
   jiocloud ls [remotePath]               List files and directories (defaults to root).
   jiocloud mkdir <remotePath>            Make the path if it doesn't already exist.
   jiocloud upload <file> [-folder KEY]   Upload a single file (auto small/chunked).
-  jiocloud download <remotePath> [local] Download a file to localPath (defaults to current dir).
+  jiocloud download <remotePath> [local] Download a file or folder to localPath.
   jiocloud delete <remotePath>           Move a file or folder to the trash.
   jiocloud copy <dir> [remotePath] [-dry-run]
                                          One-way copy of a local dir into a remote folder,
                                          creating folders and uploading new/changed files.
+  jiocloud sync <dir> [remotePath] [-dry-run]
+                                         Like copy, but deletes remote files/folders not present locally.
   jiocloud version                       Print the version.
 
 The login cookie format is:
@@ -166,7 +168,7 @@ func runCopy(args []string) {
 	if err := copier.Run(api.New(creds), srcDir, remotePath, *dryRun, false); err != nil {
 		fatal(err)
 	}
-	}
+}
 
 func runSync(args []string) {
 	fs := flag.NewFlagSet("sync", flag.ExitOnError)
@@ -190,7 +192,7 @@ func runSync(args []string) {
 	if err := copier.Run(api.New(creds), srcDir, remotePath, *dryRun, true); err != nil {
 		fatal(err)
 	}
-	}
+}
 
 func runDelete(args []string) {
 	if len(args) < 1 {
@@ -277,11 +279,6 @@ func runMkdir(args []string) {
 	fmt.Printf("Directory ready: %s (key: %s)\n", remotePath, obj.ObjectKey)
 }
 
-func fatal(err error) {
-	fmt.Fprintln(os.Stderr, "error:", err)
-	os.Exit(1)
-}
-
 func runDownload(args []string) {
 	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, "download: missing remote path argument")
@@ -304,13 +301,50 @@ func runDownload(args []string) {
 		fatal(fmt.Errorf("resolving path %q: %w", remotePath, err))
 	}
 
-	if obj.ObjectType != api.TypeFile {
-		fatal(fmt.Errorf("%q is a folder, can only download files", remotePath))
+	if obj.ObjectType == api.TypeFile {
+		fmt.Fprintf(os.Stderr, "Downloading file %s to %s...\n", remotePath, localPath)
+		if err := client.Download(obj.ObjectKey, localPath); err != nil {
+			fatal(err)
+		}
+		fmt.Printf("Successfully downloaded %s\n", localPath)
+	} else if obj.ObjectType == api.TypeFolder {
+		fmt.Fprintf(os.Stderr, "Downloading folder %s to %s/...\n", remotePath, localPath)
+		if err := downloadFolderRecursive(client, obj.ObjectKey, localPath); err != nil {
+			fatal(err)
+		}
+		fmt.Printf("Successfully downloaded folder to %s/\n", localPath)
+	} else {
+		fatal(fmt.Errorf("unknown object type %q", obj.ObjectType))
+	}
+}
+
+func downloadFolderRecursive(client *api.Client, folderKey, localDir string) error {
+	if err := os.MkdirAll(localDir, 0755); err != nil {
+		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "Downloading %s to %s...\n", remotePath, localPath)
-	if err := client.Download(obj.ObjectKey, localPath); err != nil {
-		fatal(err)
+	items, err := client.ListFolder(folderKey)
+	if err != nil {
+		return err
 	}
-	fmt.Printf("Successfully downloaded %s\n", localPath)
+
+	for _, item := range items {
+		itemLocalPath := filepath.Join(localDir, item.ObjectName)
+		if item.ObjectType == api.TypeFolder {
+			if err := downloadFolderRecursive(client, item.ObjectKey, itemLocalPath); err != nil {
+				return err
+			}
+		} else if item.ObjectType == api.TypeFile {
+			fmt.Fprintf(os.Stderr, "  %s\n", itemLocalPath)
+			if err := client.Download(item.ObjectKey, itemLocalPath); err != nil {
+				return fmt.Errorf("downloading %s: %w", item.ObjectName, err)
+			}
+		}
+	}
+	return nil
+}
+
+func fatal(err error) {
+	fmt.Fprintln(os.Stderr, "error:", err)
+	os.Exit(1)
 }
