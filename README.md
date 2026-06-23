@@ -1,7 +1,7 @@
 # jiocloud
 
 A minimal, rclone-style Go CLI for the JioAiCloud API: **login**, **whoami**,
-**ls**, single-file **upload**, one-way folder **copy**, and **delete**.
+**ls**, **mkdir**, single-file **upload**, single-file **download**, one-way folder **copy**, **sync**, and **delete**.
 
 Full usage docs: <https://AmanDevelops.github.io/jiocloud/>
 
@@ -82,6 +82,16 @@ jiocloud upload ./big.deb -folder 545CA841D1BA1906E063C00B10AC6C35
 Files under 10 MB use a single multipart request. Larger files automatically use
 the chunked protocol (`initiate` + 4 MB `PUT` chunks with per-chunk `Content-MD5`),
 resuming from the offset the server reports.
+
+## Download
+
+```bash
+# download to the current directory
+jiocloud download Documents/Report.pdf
+
+# download to a specific local path
+jiocloud download Documents/Report.pdf /tmp/Report.pdf
+```
 
 ## Whoami
 

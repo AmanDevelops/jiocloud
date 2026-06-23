@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/AmanDevelops/jiocloud/internal/api"
@@ -28,6 +29,8 @@ func main() {
 		runUpload(os.Args[2:])
 	case "delete":
 		runDelete(os.Args[2:])
+	case "download":
+		runDownload(os.Args[2:])
 	case "ls":
 		runLs(os.Args[2:])
 	case "mkdir":
@@ -58,6 +61,7 @@ Usage:
   jiocloud ls [remotePath]               List files and directories (defaults to root).
   jiocloud mkdir <remotePath>            Make the path if it doesn't already exist.
   jiocloud upload <file> [-folder KEY]   Upload a single file (auto small/chunked).
+  jiocloud download <remotePath> [local] Download a file to localPath (defaults to current dir).
   jiocloud delete <remotePath>           Move a file or folder to the trash.
   jiocloud copy <dir> [remotePath] [-dry-run]
                                          One-way copy of a local dir into a remote folder,
@@ -164,7 +168,7 @@ func runCopy(args []string) {
 	}
 	}
 
-	func runSync(args []string) {
+func runSync(args []string) {
 	fs := flag.NewFlagSet("sync", flag.ExitOnError)
 	dryRun := fs.Bool("dry-run", false, "list what would change without uploading or creating folders")
 	fs.Parse(args)
@@ -188,7 +192,7 @@ func runCopy(args []string) {
 	}
 	}
 
-	func runDelete(args []string) {
+func runDelete(args []string) {
 	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, "delete: missing remote path argument")
 		os.Exit(2)
@@ -276,4 +280,37 @@ func runMkdir(args []string) {
 func fatal(err error) {
 	fmt.Fprintln(os.Stderr, "error:", err)
 	os.Exit(1)
+}
+
+func runDownload(args []string) {
+	if len(args) < 1 {
+		fmt.Fprintln(os.Stderr, "download: missing remote path argument")
+		os.Exit(2)
+	}
+	remotePath := args[0]
+	localPath := filepath.Base(remotePath)
+	if len(args) >= 2 {
+		localPath = args[1]
+	}
+
+	creds, err := config.Load()
+	if err != nil {
+		fatal(err)
+	}
+
+	client := api.New(creds)
+	obj, err := client.ResolvePath(remotePath)
+	if err != nil {
+		fatal(fmt.Errorf("resolving path %q: %w", remotePath, err))
+	}
+
+	if obj.ObjectType != api.TypeFile {
+		fatal(fmt.Errorf("%q is a folder, can only download files", remotePath))
+	}
+
+	fmt.Fprintf(os.Stderr, "Downloading %s to %s...\n", remotePath, localPath)
+	if err := client.Download(obj.ObjectKey, localPath); err != nil {
+		fatal(err)
+	}
+	fmt.Printf("Successfully downloaded %s\n", localPath)
 }
