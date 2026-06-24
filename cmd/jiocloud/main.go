@@ -212,8 +212,10 @@ func runDelete(args []string) {
 		fatal(fmt.Errorf("resolving path %q: %w", remotePath, err))
 	}
 
-	if obj.ObjectKey == "" {
-		fatal(fmt.Errorf("cannot delete the root folder"))
+	// ResolvePath returns the root folder (named "") for an empty path or "/".
+	// Trashing the root would wipe the whole account, so refuse it.
+	if obj.ObjectName == "" || obj.ParentObjectKey == "" {
+		fatal(fmt.Errorf("refusing to delete the root folder; specify a path inside it"))
 	}
 
 	fmt.Fprintf(os.Stderr, "Deleting %s (%s)...\n", remotePath, obj.ObjectType)

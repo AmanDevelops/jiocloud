@@ -30,7 +30,7 @@ type Copier struct {
 	client   API
 	state    *State
 	dryRun   bool
-	delete   bool // true for sync, false for copy
+	delete   bool                    // true for sync, false for copy
 	listings map[string][]api.Object // folderKey -> children, cached for this run
 
 	uploaded  int
@@ -143,7 +143,7 @@ func (s *Copier) copyDir(localDir, remoteKey, rel string) error {
 		if o.ObjectType == api.TypeFile {
 			remoteFiles[o.ObjectName] = o.Hash
 		}
-		
+
 		if s.delete && !localNames[o.ObjectName] {
 			childRel := path(rel, o.ObjectName)
 			if s.dryRun {
