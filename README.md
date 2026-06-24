@@ -1,7 +1,7 @@
 # jiocloud
 
 A minimal, rclone-style Go CLI for the JioAiCloud API: **login**, **whoami**,
-**ls**, **mkdir**, single-file **upload**, single-file **download**, one-way folder **copy**, **sync**, and **delete**.
+**ls**, **mkdir**, **upload**, **download** (concurrent), one-way folder **copy**/**sync** (concurrent), and **delete**.
 
 Full usage docs: <https://AmanDevelops.github.io/jiocloud/>
 
@@ -94,7 +94,13 @@ jiocloud download Documents/Report.pdf /tmp/Report.pdf
 
 # recursively download an entire folder
 jiocloud download Backups/Photos ./LocalPhotos
+
+# download a folder with 8 concurrent transfers (default is 4)
+jiocloud download Backups/Photos ./LocalPhotos -parallel 8
 ```
+
+Folder downloads transfer multiple files at once. Tune concurrency with
+`-parallel N` (default 4, like rclone's `--transfers`).
 
 ## Whoami
 
@@ -121,8 +127,10 @@ or whose content differs. A file is **skipped** when the remote folder already
 contains one with the same name and the same MD5 hash. It is strictly one-way:
 remote files that don't exist locally are never deleted.
 
-Per-source state (folder keys + uploaded file hashes) is persisted under
-`$XDG_CONFIG_HOME/jiocloud/copy/` so folder ids are remembered across runs.
+Files are uploaded concurrently (`-parallel N`, default 4); folder creation and
+deletions stay sequential. Per-source state (folder keys + uploaded file hashes)
+is persisted under `$XDG_CONFIG_HOME/jiocloud/copy/` so folder ids are remembered
+across runs.
 
 ## Sync (identical local -> remote)
 
@@ -137,11 +145,9 @@ that no longer exist in the local directory. Use with caution.
 ## Layout
 
 ```
-cmd/jiocloud      CLI entrypoint and command dispatch
-internal/config   credential parsing + on-disk storage
-internal/api      HTTP client, scraping, login, user info, folders, upload
-internal/copier   one-way folder copy engine + state persistence
-```
-rs, upload
-internal/copier   one-way folder copy engine + state persistence
+cmd/jiocloud       CLI entrypoint and command dispatch
+internal/config    credential parsing + on-disk storage
+internal/api       HTTP client, scraping, login, user info, folders, upload, download
+internal/copier    one-way folder copy/sync engine + state persistence
+internal/parallel  bounded-concurrency worker pool for transfers
 ```

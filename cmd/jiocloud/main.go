@@ -11,10 +11,14 @@ import (
 	"github.com/AmanDevelops/jiocloud/internal/api"
 	"github.com/AmanDevelops/jiocloud/internal/config"
 	"github.com/AmanDevelops/jiocloud/internal/copier"
+	"github.com/AmanDevelops/jiocloud/internal/parallel"
 )
 
 // version is stamped at build time via -ldflags "-X main.version=...".
 var version = "dev"
+
+// defaultParallel is the default number of concurrent transfers (cf. rclone --transfers).
+const defaultParallel = 4
 
 func main() {
 	if len(os.Args) < 2 {
@@ -61,12 +65,14 @@ Usage:
   jiocloud ls [remotePath]               List files and directories (defaults to root).
   jiocloud mkdir <remotePath>            Make the path if it doesn't already exist.
   jiocloud upload <file> [-folder KEY]   Upload a single file (auto small/chunked).
-  jiocloud download <remotePath> [local] Download a file or folder to localPath.
+  jiocloud download <remotePath> [local] [-parallel N]
+                                         Download a file or folder; folders download
+                                         files concurrently (default N=4).
   jiocloud delete <remotePath>           Move a file or folder to the trash.
-  jiocloud copy <dir> [remotePath] [-dry-run]
+  jiocloud copy <dir> [remotePath] [-dry-run] [-parallel N]
                                          One-way copy of a local dir into a remote folder,
-                                         creating folders and uploading new/changed files.
-  jiocloud sync <dir> [remotePath] [-dry-run]
+                                         creating folders and uploading files concurrently.
+  jiocloud sync <dir> [remotePath] [-dry-run] [-parallel N]
                                          Like copy, but deletes remote files/folders not present locally.
   jiocloud version                       Print the version.
 
@@ -146,13 +152,18 @@ func runWhoami(args []string) {
 	fmt.Printf("Storage: %d / %d bytes used\n", u.Quota.UsedSpace, u.Quota.AllocatedSpace)
 }
 
-func runCopy(args []string) {
-	fs := flag.NewFlagSet("copy", flag.ExitOnError)
+func runCopy(args []string) { runCopyOrSync("copy", args, false) }
+
+func runSync(args []string) { runCopyOrSync("sync", args, true) }
+
+func runCopyOrSync(name string, args []string, deleteExtraneous bool) {
+	fs := flag.NewFlagSet(name, flag.ExitOnError)
 	dryRun := fs.Bool("dry-run", false, "list what would change without uploading or creating folders")
+	parallelN := fs.Int("parallel", defaultParallel, "number of files to upload concurrently")
 	fs.Parse(args)
 
 	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "copy: usage: jiocloud copy <dir> [remotePath] [-dry-run]")
+		fmt.Fprintf(os.Stderr, "%s: usage: jiocloud %s <dir> [remotePath] [-dry-run] [-parallel N]\n", name, name)
 		os.Exit(2)
 	}
 	srcDir := fs.Arg(0)
@@ -165,31 +176,7 @@ func runCopy(args []string) {
 	if err != nil {
 		fatal(err)
 	}
-	if err := copier.Run(api.New(creds), srcDir, remotePath, *dryRun, false); err != nil {
-		fatal(err)
-	}
-}
-
-func runSync(args []string) {
-	fs := flag.NewFlagSet("sync", flag.ExitOnError)
-	dryRun := fs.Bool("dry-run", false, "list what would change without uploading or creating folders")
-	fs.Parse(args)
-
-	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "sync: usage: jiocloud sync <dir> [remotePath] [-dry-run]")
-		os.Exit(2)
-	}
-	srcDir := fs.Arg(0)
-	remotePath := ""
-	if fs.NArg() >= 2 {
-		remotePath = fs.Arg(1)
-	}
-
-	creds, err := config.Load()
-	if err != nil {
-		fatal(err)
-	}
-	if err := copier.Run(api.New(creds), srcDir, remotePath, *dryRun, true); err != nil {
+	if err := copier.Run(api.New(creds), srcDir, remotePath, *dryRun, deleteExtraneous, *parallelN); err != nil {
 		fatal(err)
 	}
 }
@@ -282,14 +269,18 @@ func runMkdir(args []string) {
 }
 
 func runDownload(args []string) {
-	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "download: missing remote path argument")
+	fs := flag.NewFlagSet("download", flag.ExitOnError)
+	parallelN := fs.Int("parallel", defaultParallel, "number of files to download concurrently")
+	fs.Parse(args)
+
+	if fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "download: usage: jiocloud download <remotePath> [local] [-parallel N]")
 		os.Exit(2)
 	}
-	remotePath := args[0]
+	remotePath := fs.Arg(0)
 	localPath := filepath.Base(remotePath)
-	if len(args) >= 2 {
-		localPath = args[1]
+	if fs.NArg() >= 2 {
+		localPath = fs.Arg(1)
 	}
 
 	creds, err := config.Load()
@@ -303,47 +294,69 @@ func runDownload(args []string) {
 		fatal(fmt.Errorf("resolving path %q: %w", remotePath, err))
 	}
 
-	if obj.ObjectType == api.TypeFile {
+	switch obj.ObjectType {
+	case api.TypeFile:
 		fmt.Fprintf(os.Stderr, "Downloading file %s to %s...\n", remotePath, localPath)
 		if err := client.Download(obj.ObjectKey, localPath); err != nil {
 			fatal(err)
 		}
 		fmt.Printf("Successfully downloaded %s\n", localPath)
-	} else if obj.ObjectType == api.TypeFolder {
+	case api.TypeFolder:
 		fmt.Fprintf(os.Stderr, "Downloading folder %s to %s/...\n", remotePath, localPath)
-		if err := downloadFolderRecursive(client, obj.ObjectKey, localPath); err != nil {
+		// Enumerate the tree (creating local dirs) first, then download files
+		// concurrently — files are independent so this is a safe speed-up.
+		tasks, err := collectDownloadTasks(client, obj.ObjectKey, localPath)
+		if err != nil {
 			fatal(err)
 		}
-		fmt.Printf("Successfully downloaded folder to %s/\n", localPath)
-	} else {
+		err = parallel.Run(tasks, *parallelN, func(t downloadTask) error {
+			fmt.Fprintf(os.Stderr, "  %s\n", t.localPath)
+			if err := client.Download(t.objectKey, t.localPath); err != nil {
+				return fmt.Errorf("downloading %s: %w", t.localPath, err)
+			}
+			return nil
+		})
+		if err != nil {
+			fatal(err)
+		}
+		fmt.Printf("Successfully downloaded %d files to %s/\n", len(tasks), localPath)
+	default:
 		fatal(fmt.Errorf("unknown object type %q", obj.ObjectType))
 	}
 }
 
-func downloadFolderRecursive(client *api.Client, folderKey, localDir string) error {
-	if err := os.MkdirAll(localDir, 0755); err != nil {
-		return err
+type downloadTask struct {
+	objectKey string
+	localPath string
+}
+
+// collectDownloadTasks recursively walks a remote folder, creating the matching
+// local directory tree and returning the flat list of files to download.
+func collectDownloadTasks(client *api.Client, folderKey, localDir string) ([]downloadTask, error) {
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		return nil, err
 	}
 
 	items, err := client.ListFolder(folderKey)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	var tasks []downloadTask
 	for _, item := range items {
 		itemLocalPath := filepath.Join(localDir, item.ObjectName)
-		if item.ObjectType == api.TypeFolder {
-			if err := downloadFolderRecursive(client, item.ObjectKey, itemLocalPath); err != nil {
-				return err
+		switch item.ObjectType {
+		case api.TypeFolder:
+			sub, err := collectDownloadTasks(client, item.ObjectKey, itemLocalPath)
+			if err != nil {
+				return nil, err
 			}
-		} else if item.ObjectType == api.TypeFile {
-			fmt.Fprintf(os.Stderr, "  %s\n", itemLocalPath)
-			if err := client.Download(item.ObjectKey, itemLocalPath); err != nil {
-				return fmt.Errorf("downloading %s: %w", item.ObjectName, err)
-			}
+			tasks = append(tasks, sub...)
+		case api.TypeFile:
+			tasks = append(tasks, downloadTask{objectKey: item.ObjectKey, localPath: itemLocalPath})
 		}
 	}
-	return nil
+	return tasks, nil
 }
 
 func fatal(err error) {
