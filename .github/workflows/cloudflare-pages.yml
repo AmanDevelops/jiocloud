@@ -25,7 +25,7 @@ jobs:
           working-directory: site
 
       - name: Build Jekyll site
-        run: bundle exec jekyll build --source site --destination site/_site
+        run: bundle exec jekyll build --destination _site
         working-directory: site
 
       - name: Publish to Cloudflare Pages
