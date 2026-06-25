@@ -1,0 +1,6 @@
+name = "jiocloud"
+compatibility_date = "2024-11-01"
+pages_build_output_dir = "site/_site"
+
+[vars]
+# Add any environment variables here if needed
