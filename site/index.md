@@ -1,5 +1,6 @@
 ---
 title: jiocloud
+layout: default
 ---
 
 **jiocloud** is a small, [rclone](https://rclone.org/)-style command-line tool for
