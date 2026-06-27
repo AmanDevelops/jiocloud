@@ -7,7 +7,7 @@
 # JIOCLOUD_INSTALL_DIR). Pin a version with JIOCLOUD_VERSION=vX.Y.Z.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/AmanDevelops/jiocloud/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/AmanDevelops/jiocloud/master/install.sh | sh
 #   sh install.sh
 #
 set -eu

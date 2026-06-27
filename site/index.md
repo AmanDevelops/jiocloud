@@ -12,7 +12,7 @@ do one-way (local → remote) folder copy, sync, and delete files/folders.
 ## Install (Linux)
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/AmanDevelops/jiocloud/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/AmanDevelops/jiocloud/master/install.sh | sh
 ```
 
 This downloads the latest release for your architecture (`amd64`/`arm64`), verifies
@@ -24,7 +24,7 @@ Install a specific version or location:
 
 ```sh
 JIOCLOUD_VERSION=v1.0.0 JIOCLOUD_INSTALL_DIR=/usr/local/bin \
-  sh -c "$(curl -fsSL https://raw.githubusercontent.com/AmanDevelops/jiocloud/main/install.sh)"
+  sh -c "$(curl -fsSL https://raw.githubusercontent.com/AmanDevelops/jiocloud/master/install.sh)"
 ```
 
 Or build from source (Go 1.26+):
