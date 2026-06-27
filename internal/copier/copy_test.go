@@ -42,8 +42,12 @@ func (f *fakeAPI) CreateFolder(name, parentKey string) (string, error) {
 	return key, nil
 }
 
-func (f *fakeAPI) Upload(path, folderKey string) (*api.UploadResult, error) {
+func (f *fakeAPI) Upload(path, folderKey string, progress func(uploaded, total int64)) (*api.UploadResult, error) {
 	f.uploads = append(f.uploads, folderKey+"/"+filepath.Base(path))
+	if progress != nil {
+		info, _ := os.Stat(path)
+		progress(info.Size(), info.Size())
+	}
 	return &api.UploadResult{ObjectName: filepath.Base(path)}, nil
 }
 
@@ -87,7 +91,7 @@ func TestCopyCreatesFoldersAndUploads(t *testing.T) {
 	mustWrite(t, filepath.Join(src, "sub", "b.txt"), "world")
 
 	f := newFakeAPI()
-	if err := Run(f, src, "", false, false); err != nil {
+	if err := Run(f, src, "", false, false, 1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -111,7 +115,7 @@ func TestCopySkipsUnchanged(t *testing.T) {
 		{ObjectKey: "x", ObjectType: api.TypeFile, ObjectName: "a.txt", Hash: md5str([]byte("hello"))},
 	}
 
-	if err := Run(f, src, "", false, false); err != nil {
+	if err := Run(f, src, "", false, false, 1); err != nil {
 		t.Fatal(err)
 	}
 	if len(f.uploads) != 0 {
@@ -133,7 +137,7 @@ func TestSyncDeletesExtraneousRemote(t *testing.T) {
 	}
 
 	// deleteExtraneous = true (sync semantics).
-	if err := Run(f, src, "", false, true); err != nil {
+	if err := Run(f, src, "", false, true, 1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -158,7 +162,7 @@ func TestCopyDoesNotDeleteExtraneousRemote(t *testing.T) {
 	}
 
 	// deleteExtraneous = false (copy semantics): remote-only files are left alone.
-	if err := Run(f, src, "", false, false); err != nil {
+	if err := Run(f, src, "", false, false, 1); err != nil {
 		t.Fatal(err)
 	}
 

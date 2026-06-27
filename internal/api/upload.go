@@ -29,7 +29,8 @@ type UploadResult struct {
 
 // Upload uploads a local file into the given folder, choosing the single-shot or
 // chunked strategy based on file size. folderKey may be empty for the root.
-func (c *Client) Upload(path, folderKey string) (*UploadResult, error) {
+// If progress is non-nil, it is called with the uploaded bytes and total bytes.
+func (c *Client) Upload(path, folderKey string, progress func(uploaded, total int64)) (*UploadResult, error) {
 	if folderKey == "" {
 		user, err := c.UserInfo()
 		if err != nil {
@@ -47,9 +48,9 @@ func (c *Client) Upload(path, folderKey string) (*UploadResult, error) {
 	}
 
 	if info.Size() < smallFileLimit {
-		return c.uploadSmall(path, info.Size(), folderKey)
+		return c.uploadSmall(path, info.Size(), folderKey, progress)
 	}
-	return c.uploadChunked(path, info.Size(), folderKey)
+	return c.uploadChunked(path, info.Size(), folderKey, progress)
 }
 
 func md5File(path string) (string, error) {
@@ -65,7 +66,7 @@ func md5File(path string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-func (c *Client) uploadSmall(path string, size int64, folderKey string) (*UploadResult, error) {
+func (c *Client) uploadSmall(path string, size int64, folderKey string, progress func(uploaded, total int64)) (*UploadResult, error) {
 	hash, err := md5File(path)
 	if err != nil {
 		return nil, err
@@ -112,7 +113,11 @@ func (c *Client) uploadSmall(path string, size int64, folderKey string) (*Upload
 	// multipart writer generates the Content-Type with the correct boundary.
 	req.Header.Set("Content-Type", w.FormDataContentType())
 
-	return c.doUpload(req, metaJSON)
+	res, err := c.doUpload(req, metaJSON)
+	if err == nil && progress != nil {
+		progress(size, size)
+	}
+	return res, err
 }
 
 type initiateResp struct {
@@ -120,7 +125,7 @@ type initiateResp struct {
 	Offset        int64  `json:"offset"`
 }
 
-func (c *Client) uploadChunked(path string, size int64, folderKey string) (*UploadResult, error) {
+func (c *Client) uploadChunked(path string, size int64, folderKey string, progress func(uploaded, total int64)) (*UploadResult, error) {
 	hash, err := md5File(path)
 	if err != nil {
 		return nil, err
@@ -155,6 +160,9 @@ func (c *Client) uploadChunked(path string, size int64, folderKey string) (*Uplo
 	// Detect instant upload (deduplication): the server returns the file object.
 	var result UploadResult
 	if err := json.Unmarshal(respBody, &result); err == nil && result.ObjectKey != "" {
+		if progress != nil {
+			progress(size, size)
+		}
 		return &result, nil
 	}
 
@@ -211,14 +219,18 @@ func (c *Client) uploadChunked(path string, size int64, folderKey string) (*Uplo
 		var next initiateResp
 		if err := json.Unmarshal(cbody, &next); err == nil && next.Offset > offset {
 			offset = next.Offset
-			fmt.Printf("\ruploaded %d / %d bytes", offset, size)
+			if progress != nil {
+				progress(offset, size)
+			}
 			continue
 		}
 
 		// No advancing offset -> treat as the terminal response.
 		var result UploadResult
 		if err := json.Unmarshal(cbody, &result); err == nil && result.ObjectKey != "" {
-			fmt.Printf("\ruploaded %d / %d bytes\n", size, size)
+			if progress != nil {
+				progress(size, size)
+			}
 			return &result, nil
 		}
 		// Otherwise advance past this chunk and keep going.

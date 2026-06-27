@@ -26,8 +26,13 @@ type Client struct {
 
 // New returns a client bound to the given credentials.
 func New(creds *config.Credentials) *Client {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.MaxIdleConns = 100
+	t.MaxConnsPerHost = 100
+	t.MaxIdleConnsPerHost = 100
+
 	return &Client{
-		http:  &http.Client{Timeout: 0}, // no overall timeout: large uploads can be slow
+		http:  &http.Client{Timeout: 0, Transport: t}, // no overall timeout: large uploads can be slow
 		creds: creds,
 	}
 }

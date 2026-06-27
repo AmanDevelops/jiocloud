@@ -11,6 +11,9 @@ import (
 	"github.com/AmanDevelops/jiocloud/internal/api"
 	"github.com/AmanDevelops/jiocloud/internal/config"
 	"github.com/AmanDevelops/jiocloud/internal/copier"
+	"github.com/AmanDevelops/jiocloud/internal/parallel"
+	"github.com/vbauerster/mpb/v8"
+	"github.com/vbauerster/mpb/v8/decor"
 )
 
 // version is stamped at build time via -ldflags "-X main.version=...".
@@ -61,12 +64,12 @@ Usage:
   jiocloud ls [remotePath]               List files and directories (defaults to root).
   jiocloud mkdir <remotePath>            Make the path if it doesn't already exist.
   jiocloud upload <file> [-folder KEY]   Upload a single file (auto small/chunked).
-  jiocloud download <remotePath> [local] Download a file or folder to localPath.
+  jiocloud download <remotePath> [local] [-parallel N] Download a file or folder to localPath.
   jiocloud delete <remotePath>           Move a file or folder to the trash.
-  jiocloud copy <dir> [remotePath] [-dry-run]
+  jiocloud copy <dir> [remotePath] [-dry-run] [-parallel N]
                                          One-way copy of a local dir into a remote folder,
                                          creating folders and uploading new/changed files.
-  jiocloud sync <dir> [remotePath] [-dry-run]
+  jiocloud sync <dir> [remotePath] [-dry-run] [-parallel N]
                                          Like copy, but deletes remote files/folders not present locally.
   jiocloud version                       Print the version.
 
@@ -105,13 +108,13 @@ func runLogin(args []string) {
 func runUpload(args []string) {
 	fs := flag.NewFlagSet("upload", flag.ExitOnError)
 	folder := fs.String("folder", "", "destination folder key (default: root)")
-	fs.Parse(args)
+	posArgs := parseInterspersed(fs, args)
 
-	if fs.NArg() < 1 {
+	if len(posArgs) < 1 {
 		fmt.Fprintln(os.Stderr, "upload: missing file argument")
 		os.Exit(2)
 	}
-	path := fs.Arg(0)
+	path := posArgs[0]
 
 	creds, err := config.Load()
 	if err != nil {
@@ -120,7 +123,7 @@ func runUpload(args []string) {
 
 	client := api.New(creds)
 	fmt.Fprintf(os.Stderr, "Uploading %s...\n", path)
-	res, err := client.Upload(path, *folder)
+	res, err := client.Upload(path, *folder, nil)
 	if err != nil {
 		fatal(err)
 	}
@@ -146,26 +149,42 @@ func runWhoami(args []string) {
 	fmt.Printf("Storage: %d / %d bytes used\n", u.Quota.UsedSpace, u.Quota.AllocatedSpace)
 }
 
+func parseInterspersed(fs *flag.FlagSet, args []string) []string {
+	var posArgs []string
+	for len(args) > 0 {
+		if err := fs.Parse(args); err != nil {
+			break
+		}
+		args = fs.Args()
+		if len(args) > 0 {
+			posArgs = append(posArgs, args[0])
+			args = args[1:]
+		}
+	}
+	return posArgs
+}
+
 func runCopy(args []string) {
 	fs := flag.NewFlagSet("copy", flag.ExitOnError)
 	dryRun := fs.Bool("dry-run", false, "list what would change without uploading or creating folders")
-	fs.Parse(args)
+	parallelN := fs.Int("parallel", 6, "number of concurrent uploads")
+	posArgs := parseInterspersed(fs, args)
 
-	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "copy: usage: jiocloud copy <dir> [remotePath] [-dry-run]")
+	if len(posArgs) < 1 {
+		fmt.Fprintln(os.Stderr, "copy: usage: jiocloud copy <dir> [remotePath] [-dry-run] [-parallel N]")
 		os.Exit(2)
 	}
-	srcDir := fs.Arg(0)
+	srcDir := posArgs[0]
 	remotePath := ""
-	if fs.NArg() >= 2 {
-		remotePath = fs.Arg(1)
+	if len(posArgs) >= 2 {
+		remotePath = posArgs[1]
 	}
 
 	creds, err := config.Load()
 	if err != nil {
 		fatal(err)
 	}
-	if err := copier.Run(api.New(creds), srcDir, remotePath, *dryRun, false); err != nil {
+	if err := copier.Run(api.New(creds), srcDir, remotePath, *dryRun, false, *parallelN); err != nil {
 		fatal(err)
 	}
 }
@@ -173,23 +192,24 @@ func runCopy(args []string) {
 func runSync(args []string) {
 	fs := flag.NewFlagSet("sync", flag.ExitOnError)
 	dryRun := fs.Bool("dry-run", false, "list what would change without uploading or creating folders")
-	fs.Parse(args)
+	parallelN := fs.Int("parallel", 6, "number of concurrent uploads")
+	posArgs := parseInterspersed(fs, args)
 
-	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "sync: usage: jiocloud sync <dir> [remotePath] [-dry-run]")
+	if len(posArgs) < 1 {
+		fmt.Fprintln(os.Stderr, "sync: usage: jiocloud sync <dir> [remotePath] [-dry-run] [-parallel N]")
 		os.Exit(2)
 	}
-	srcDir := fs.Arg(0)
+	srcDir := posArgs[0]
 	remotePath := ""
-	if fs.NArg() >= 2 {
-		remotePath = fs.Arg(1)
+	if len(posArgs) >= 2 {
+		remotePath = posArgs[1]
 	}
 
 	creds, err := config.Load()
 	if err != nil {
 		fatal(err)
 	}
-	if err := copier.Run(api.New(creds), srcDir, remotePath, *dryRun, true); err != nil {
+	if err := copier.Run(api.New(creds), srcDir, remotePath, *dryRun, true, *parallelN); err != nil {
 		fatal(err)
 	}
 }
@@ -282,14 +302,18 @@ func runMkdir(args []string) {
 }
 
 func runDownload(args []string) {
-	if len(args) < 1 {
+	fs := flag.NewFlagSet("download", flag.ExitOnError)
+	parallelN := fs.Int("parallel", 6, "number of concurrent downloads")
+	posArgs := parseInterspersed(fs, args)
+
+	if len(posArgs) < 1 {
 		fmt.Fprintln(os.Stderr, "download: missing remote path argument")
 		os.Exit(2)
 	}
-	remotePath := args[0]
+	remotePath := posArgs[0]
 	localPath := filepath.Base(remotePath)
-	if len(args) >= 2 {
-		localPath = args[1]
+	if len(posArgs) >= 2 {
+		localPath = posArgs[1]
 	}
 
 	creds, err := config.Load()
@@ -303,47 +327,108 @@ func runDownload(args []string) {
 		fatal(fmt.Errorf("resolving path %q: %w", remotePath, err))
 	}
 
+	var tasks []downloadTask
 	if obj.ObjectType == api.TypeFile {
-		fmt.Fprintf(os.Stderr, "Downloading file %s to %s...\n", remotePath, localPath)
-		if err := client.Download(obj.ObjectKey, localPath); err != nil {
-			fatal(err)
-		}
-		fmt.Printf("Successfully downloaded %s\n", localPath)
+		tasks = append(tasks, downloadTask{
+			objectKey:  obj.ObjectKey,
+			objectName: obj.ObjectName,
+			localPath:  localPath,
+			size:       obj.SizeInBytes,
+		})
 	} else if obj.ObjectType == api.TypeFolder {
-		fmt.Fprintf(os.Stderr, "Downloading folder %s to %s/...\n", remotePath, localPath)
-		if err := downloadFolderRecursive(client, obj.ObjectKey, localPath); err != nil {
+		fmt.Fprintf(os.Stderr, "Collecting files from folder %s...\n", remotePath)
+		tasks, err = collectDownloadTasks(client, obj.ObjectKey, localPath)
+		if err != nil {
 			fatal(err)
 		}
-		fmt.Printf("Successfully downloaded folder to %s/\n", localPath)
 	} else {
 		fatal(fmt.Errorf("unknown object type %q", obj.ObjectType))
 	}
+
+	if len(tasks) == 0 {
+		fmt.Println("No files to download.")
+		return
+	}
+
+	p := mpb.New(mpb.WithWidth(60))
+	err = parallel.Run(tasks, *parallelN, func(t downloadTask) error {
+		name := t.objectName
+		if len(name) > 35 {
+			name = "..." + name[len(name)-32:]
+		}
+
+		bar := p.New(t.size,
+			mpb.BarStyle(),
+			mpb.PrependDecorators(
+				decor.Name(name, decor.WCSyncSpaceR),
+				decor.CountersKibiByte("% .2f / % .2f", decor.WCSyncSpace),
+			),
+			mpb.AppendDecorators(
+				decor.Percentage(decor.WCSyncSpace),
+			),
+		)
+
+		var last int64
+		progress := func(downloaded, total int64) {
+			if downloaded > last {
+				bar.IncrBy(int(downloaded - last))
+				last = downloaded
+			}
+		}
+
+		if err := client.Download(t.objectKey, t.localPath, progress); err != nil {
+			bar.Abort(false)
+			return fmt.Errorf("downloading %s: %w", t.objectName, err)
+		}
+		
+		// If total wasn't known beforehand (e.g. 0 size from list)
+		bar.SetTotal(last, true)
+		return nil
+	})
+	p.Wait()
+	if err != nil {
+		fatal(err)
+	}
+
+	fmt.Printf("Successfully downloaded %d files to %s\n", len(tasks), localPath)
 }
 
-func downloadFolderRecursive(client *api.Client, folderKey, localDir string) error {
+type downloadTask struct {
+	objectKey  string
+	objectName string
+	localPath  string
+	size       int64
+}
+
+func collectDownloadTasks(client *api.Client, folderKey, localDir string) ([]downloadTask, error) {
 	if err := os.MkdirAll(localDir, 0755); err != nil {
-		return err
+		return nil, err
 	}
 
 	items, err := client.ListFolder(folderKey)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	var tasks []downloadTask
 	for _, item := range items {
 		itemLocalPath := filepath.Join(localDir, item.ObjectName)
 		if item.ObjectType == api.TypeFolder {
-			if err := downloadFolderRecursive(client, item.ObjectKey, itemLocalPath); err != nil {
-				return err
+			subTasks, err := collectDownloadTasks(client, item.ObjectKey, itemLocalPath)
+			if err != nil {
+				return nil, err
 			}
+			tasks = append(tasks, subTasks...)
 		} else if item.ObjectType == api.TypeFile {
-			fmt.Fprintf(os.Stderr, "  %s\n", itemLocalPath)
-			if err := client.Download(item.ObjectKey, itemLocalPath); err != nil {
-				return fmt.Errorf("downloading %s: %w", item.ObjectName, err)
-			}
+			tasks = append(tasks, downloadTask{
+				objectKey:  item.ObjectKey,
+				objectName: item.ObjectName,
+				localPath:  itemLocalPath,
+				size:       item.SizeInBytes,
+			})
 		}
 	}
-	return nil
+	return tasks, nil
 }
 
 func fatal(err error) {
