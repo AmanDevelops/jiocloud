@@ -5,16 +5,13 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 
 	"github.com/AmanDevelops/jiocloud/internal/api"
 )
 
-// fakeAPI is an in-memory stand-in for the JioAiCloud client. Upload may be
-// called concurrently, so its bookkeeping is guarded by mu.
+// fakeAPI is an in-memory stand-in for the JioAiCloud client.
 type fakeAPI struct {
-	mu      sync.Mutex
 	folders map[string][]api.Object // folderKey -> children
 	nextKey int
 	uploads []string // folderKey/name of uploaded files
@@ -46,9 +43,7 @@ func (f *fakeAPI) CreateFolder(name, parentKey string) (string, error) {
 }
 
 func (f *fakeAPI) Upload(path, folderKey string) (*api.UploadResult, error) {
-	f.mu.Lock()
 	f.uploads = append(f.uploads, folderKey+"/"+filepath.Base(path))
-	f.mu.Unlock()
 	return &api.UploadResult{ObjectName: filepath.Base(path)}, nil
 }
 
@@ -92,7 +87,7 @@ func TestCopyCreatesFoldersAndUploads(t *testing.T) {
 	mustWrite(t, filepath.Join(src, "sub", "b.txt"), "world")
 
 	f := newFakeAPI()
-	if err := Run(f, src, "", false, false, 4); err != nil {
+	if err := Run(f, src, "", false, false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -116,7 +111,7 @@ func TestCopySkipsUnchanged(t *testing.T) {
 		{ObjectKey: "x", ObjectType: api.TypeFile, ObjectName: "a.txt", Hash: md5str([]byte("hello"))},
 	}
 
-	if err := Run(f, src, "", false, false, 4); err != nil {
+	if err := Run(f, src, "", false, false); err != nil {
 		t.Fatal(err)
 	}
 	if len(f.uploads) != 0 {
@@ -138,7 +133,7 @@ func TestSyncDeletesExtraneousRemote(t *testing.T) {
 	}
 
 	// deleteExtraneous = true (sync semantics).
-	if err := Run(f, src, "", false, true, 4); err != nil {
+	if err := Run(f, src, "", false, true); err != nil {
 		t.Fatal(err)
 	}
 
@@ -163,7 +158,7 @@ func TestCopyDoesNotDeleteExtraneousRemote(t *testing.T) {
 	}
 
 	// deleteExtraneous = false (copy semantics): remote-only files are left alone.
-	if err := Run(f, src, "", false, false, 4); err != nil {
+	if err := Run(f, src, "", false, false); err != nil {
 		t.Fatal(err)
 	}
 

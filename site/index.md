@@ -4,7 +4,7 @@ layout: default
 ---
 
 **jiocloud** is a small, [rclone](https://rclone.org/)-style command-line tool for
-the JioAiCloud API. It can authenticate with your account, list files, create directories, upload and download files (with concurrent transfers for folders),
+the JioAiCloud API. It can authenticate with your account, list files, create directories, upload and download single files,
 do one-way (local → remote) folder copy, sync, and delete files/folders.
 
 > Unofficial. Not affiliated with or endorsed by Jio. Use with your own account.
@@ -110,16 +110,9 @@ name and the same MD5. Output marks each file:
 = photos/2024/img002.jpg            unchanged, skipped
 ```
 
-It is strictly one-way: **remote-only files are never deleted.** Files are uploaded
-concurrently — pass `-parallel N` (default 4) to tune throughput. Per-source state
+It is strictly one-way: **remote-only files are never deleted.** Per-source state
 (folder keys + uploaded hashes) is kept under `~/.config/jiocloud/copy/`, so re-runs
 remember the folders they created.
-
-Folder downloads are likewise concurrent:
-
-```sh
-jiocloud download Backups/Photos ./LocalPhotos -parallel 8
-```
 
 ## Command reference
 
@@ -130,10 +123,9 @@ jiocloud download Backups/Photos ./LocalPhotos -parallel 8
 | `jiocloud ls [remotePath]` | List files and directories (defaults to root). |
 | `jiocloud mkdir <remotePath>` | Make the path if it doesn't already exist. |
 | `jiocloud upload <file> [-folder KEY]` | Upload one file (auto small/chunked). |
-| `jiocloud download <remotePath> [local] [-parallel N]` | Download a file or folder (folders download concurrently). |
 | `jiocloud delete <remotePath>` | Move a file or folder to the trash. |
-| `jiocloud copy <dir> [remotePath] [-dry-run] [-parallel N]` | One-way local → remote folder copy (concurrent uploads). |
-| `jiocloud sync <dir> [remotePath] [-dry-run] [-parallel N]` | Like copy, but deletes remote files/folders not present locally. |
+| `jiocloud copy <dir> [remotePath] [-dry-run]` | One-way local → remote folder copy. |
+| `jiocloud sync <dir> [remotePath] [-dry-run]` | Like copy, but deletes remote files/folders not present locally. |
 | `jiocloud version` | Print the version. |
 
 ## Links

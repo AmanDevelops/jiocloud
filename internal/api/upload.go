@@ -30,6 +30,14 @@ type UploadResult struct {
 // Upload uploads a local file into the given folder, choosing the single-shot or
 // chunked strategy based on file size. folderKey may be empty for the root.
 func (c *Client) Upload(path, folderKey string) (*UploadResult, error) {
+	if folderKey == "" {
+		user, err := c.UserInfo()
+		if err != nil {
+			return nil, fmt.Errorf("getting root folder key: %w", err)
+		}
+		folderKey = user.RootFolderKey
+	}
+
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil, err
@@ -104,7 +112,7 @@ func (c *Client) uploadSmall(path string, size int64, folderKey string) (*Upload
 	// multipart writer generates the Content-Type with the correct boundary.
 	req.Header.Set("Content-Type", w.FormDataContentType())
 
-	return c.doUpload(req)
+	return c.doUpload(req, metaJSON)
 }
 
 type initiateResp struct {
@@ -141,8 +149,15 @@ func (c *Client) uploadChunked(path string, size int64, folderKey string) (*Uplo
 		return nil, err
 	}
 	if status != http.StatusOK && status != http.StatusCreated {
-		return nil, fmt.Errorf("initiate failed: status %d: %s", status, respBody)
+		return nil, fmt.Errorf("initiate failed: status %d: %s (request body: %s)", status, respBody, string(initBody))
 	}
+
+	// Detect instant upload (deduplication): the server returns the file object.
+	var result UploadResult
+	if err := json.Unmarshal(respBody, &result); err == nil && result.ObjectKey != "" {
+		return &result, nil
+	}
+
 	var init initiateResp
 	if err := json.Unmarshal(respBody, &init); err != nil {
 		return nil, fmt.Errorf("parsing initiate response: %w", err)
@@ -213,13 +228,13 @@ func (c *Client) uploadChunked(path string, size int64, folderKey string) (*Uplo
 	return nil, fmt.Errorf("upload finished without a final file object response")
 }
 
-func (c *Client) doUpload(req *http.Request) (*UploadResult, error) {
+func (c *Client) doUpload(req *http.Request, metadata []byte) (*UploadResult, error) {
 	body, status, err := c.do(req)
 	if err != nil {
 		return nil, err
 	}
 	if status != http.StatusOK && status != http.StatusCreated {
-		return nil, fmt.Errorf("upload failed: status %d: %s", status, body)
+		return nil, fmt.Errorf("upload failed: status %d: %s (metadata: %s)", status, body, string(metadata))
 	}
 	var result UploadResult
 	if err := json.Unmarshal(body, &result); err != nil {

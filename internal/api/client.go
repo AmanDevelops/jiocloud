@@ -13,8 +13,8 @@ const (
 	origin        = "https://www.jioaicloud.com"
 	referer       = "https://www.jioaicloud.com/"
 
-	uploadHost   = "https://jmng2-upload.jioaicloud.com"
-	apiHost      = "https://jmng2-api.jioaicloud.com" // nmsURL
+	uploadHost   = "https://jaws-upload.jioaicloud.com"
+	apiHost      = "https://jaws-api.jioaicloud.com" // nmsURL
 	securityHost = "https://api.jioaicloud.com"       // securityURL (global DC)
 )
 

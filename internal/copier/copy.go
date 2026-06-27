@@ -12,10 +12,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
 
 	"github.com/AmanDevelops/jiocloud/internal/api"
-	"github.com/AmanDevelops/jiocloud/internal/parallel"
 )
 
 // API is the subset of *api.Client the copier needs (kept small for testing).
@@ -27,28 +25,14 @@ type API interface {
 	Trash(obj api.Object) error
 }
 
-// uploadTask is a single file queued for upload, collected during the sequential
-// walk and executed concurrently afterwards.
-type uploadTask struct {
-	localPath string
-	remoteKey string
-	childRel  string
-	hash      string
-	size      int64
-}
-
 // Copier carries the state for a single copy run.
 type Copier struct {
-	client      API
-	state       *State
-	dryRun      bool
-	delete      bool                    // true for sync, false for copy
-	parallelism int                     // concurrent uploads
-	listings    map[string][]api.Object // folderKey -> children, cached for this run
+	client   API
+	state    *State
+	dryRun   bool
+	delete   bool                    // true for sync, false for copy
+	listings map[string][]api.Object // folderKey -> children, cached for this run
 
-	tasks []uploadTask // files to upload, gathered during the walk
-
-	mu        sync.Mutex // guards the counters + state during concurrent uploads
 	uploaded  int
 	skipped   int
 	created   int
@@ -58,8 +42,7 @@ type Copier struct {
 
 // Run performs a one-way copy (or sync) of srcDir into the remote folder at remotePath.
 // If deleteExtraneous is true, remote files/folders not present locally are moved to trash.
-// parallelism controls how many files are uploaded concurrently.
-func Run(client API, srcDir, remotePath string, dryRun, deleteExtraneous bool, parallelism int) error {
+func Run(client API, srcDir, remotePath string, dryRun, deleteExtraneous bool) error {
 	abs, err := filepath.Abs(srcDir)
 	if err != nil {
 		return err
@@ -84,12 +67,11 @@ func Run(client API, srcDir, remotePath string, dryRun, deleteExtraneous bool, p
 	state.Root = user.RootFolderKey
 
 	s := &Copier{
-		client:      client,
-		state:       state,
-		dryRun:      dryRun,
-		delete:      deleteExtraneous,
-		parallelism: parallelism,
-		listings:    map[string][]api.Object{},
+		client:   client,
+		state:    state,
+		dryRun:   dryRun,
+		delete:   deleteExtraneous,
+		listings: map[string][]api.Object{},
 	}
 
 	op := "Copying"
@@ -107,15 +89,8 @@ func Run(client API, srcDir, remotePath string, dryRun, deleteExtraneous bool, p
 	}
 	s.state.Folders[""] = baseKey
 
-	// Walk phase (sequential): create folders, handle deletes, decide skips, and
-	// queue the files that need uploading into s.tasks.
 	if err := s.copyDir(abs, baseKey, ""); err != nil {
-		_ = s.state.save() // persist whatever progress we made before failing
-		return err
-	}
-
-	// Transfer phase (concurrent): upload the queued files.
-	if err := s.runUploads(); err != nil {
+		// Persist whatever progress we made before returning the error.
 		_ = s.state.save()
 		return err
 	}
@@ -241,33 +216,15 @@ func (s *Copier) copyDir(localDir, remoteKey, rel string) error {
 			continue
 		}
 
-		// Queue for the concurrent transfer phase.
-		s.tasks = append(s.tasks, uploadTask{
-			localPath: localPath,
-			remoteKey: remoteKey,
-			childRel:  childRel,
-			hash:      hash,
-			size:      info.Size(),
-		})
+		fmt.Printf("  + %s (%s)\n", childRel, humanBytes(info.Size()))
+		if _, err := s.client.Upload(localPath, remoteKey); err != nil {
+			return fmt.Errorf("uploading %s: %w", childRel, err)
+		}
+		s.uploaded++
+		s.bytesSent += info.Size()
+		s.state.Files[childRel] = hash
 	}
 	return nil
-}
-
-// runUploads executes the queued upload tasks concurrently, updating counters and
-// state under the mutex as each completes.
-func (s *Copier) runUploads() error {
-	return parallel.Run(s.tasks, s.parallelism, func(t uploadTask) error {
-		fmt.Printf("  + %s (%s)\n", t.childRel, humanBytes(t.size))
-		if _, err := s.client.Upload(t.localPath, t.remoteKey); err != nil {
-			return fmt.Errorf("uploading %s: %w", t.childRel, err)
-		}
-		s.mu.Lock()
-		s.uploaded++
-		s.bytesSent += t.size
-		s.state.Files[t.childRel] = t.hash
-		s.mu.Unlock()
-		return nil
-	})
 }
 
 // ensureFolder returns the key of the named child folder of parentKey, creating
